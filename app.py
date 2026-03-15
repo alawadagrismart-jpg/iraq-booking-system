@@ -1,219 +1,132 @@
 import streamlit as st
-import pandas as pd
-import sqlite3
 import qrcode
+import time
+import requests # للمستقبل عند ربطه بسيرفر SMS حقيقي
 from io import BytesIO
 from datetime import datetime
-import time
 
 # ==========================================
-# 1. التصميم البصري الخارق (Ultra-Modern UI)
+# 1. إعدادات السيرفر (محاكاة قاعدة بيانات عين العراق)
 # ==========================================
-st.set_page_config(page_title="منظومة عين العراق | الإصدار الاحترافي", layout="wide", initial_sidebar_state="expanded")
+# التواريخ المتاحة فعلياً في السيرفر لكل مدينة
+SERVER_DATES = {
+    "بغداد": {"الكرخ": ["2026-03-20", "2026-03-22"], "الرصافة": ["2026-03-25"]},
+    "الأنبار": {"حديثة": ["2026-03-16", "2026-03-18"], "الرمادي": ["2026-03-30"]},
+    "البصرة": {"الزبير": ["2026-04-01"], "القرنة": ["2026-04-05"]}
+}
 
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-    * { font-family: 'Cairo', sans-serif; direction: rtl; text-align: right; }
+# ==========================================
+# 2. وظائف النظام (System Functions)
+# ==========================================
+def send_sms_logic(phone_number):
+    """هذه الوظيفة هي التي تتواصل مع مزود الخدمة لإرسال الكود"""
+    # في الواقع هنا نضع رابط API مثل Twilio أو Firebase
+    actual_code = "5599" # هذا الكود الذي "يفترضه" السيرفر الآن
+    return actual_code
+
+# ==========================================
+# 3. واجهة المستخدم والتنقل
+# ==========================================
+st.set_page_config(page_title="منظومة عين العراق المركزية", layout="centered")
+
+# إدارة حالة النظام (State Management)
+if 'auth_status' not in st.session_state: st.session_state.auth_status = False
+if 'step' not in st.session_state: st.session_state.step = "login"
+if 'generated_otp' not in st.session_state: st.session_state.generated_otp = None
+
+# --- المرحلة الأولى: التحقق من الهاتف (Gateway) ---
+if st.session_state.step == "login":
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Coat_of_arms_of_Iraq.svg/1200px-Coat_of_arms_of_Iraq.svg.png", width=100)
+    st.title("تسجيل الدخول - منظومة عين العراق")
     
-    /* خلفية التطبيق */
-    .stApp { background-color: #f4f7f6; }
+    phone = st.text_input("أدخل رقم الهاتف المرتبط بالبطاقة الوطنية", placeholder="07XXXXXXXX")
     
-    /* كارت الخطوات */
-    .step-card {
-        background: white; padding: 25px; border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.05); margin-bottom: 30px;
-        border-right: 8px solid #20A090;
-    }
+    if st.button("إرسال كود التحقق 📲"):
+        if len(phone) >= 10:
+            with st.spinner('جاري إرسال الطلب لسيرفرات الاتصالات...'):
+                time.sleep(2)
+                # السيرفر يولد الكود ويرسله
+                st.session_state.generated_otp = send_sms_logic(phone)
+                st.session_state.step = "otp_verify"
+                st.rerun()
+        else:
+            st.error("يرجى إدخال رقم هاتف عراقي صحيح")
+
+# --- المرحلة الثانية: إدخال الكود (Handshake) ---
+elif st.session_state.step == "otp_verify":
+    st.subheader("تأكيد هوية الرقم")
+    st.info(f"تم إرسال كود التحقق إلى هاتفك. (لأغراض الفحص الكود هو: {st.session_state.generated_otp})")
     
-    /* تصميم أزرار النيون للتحكم */
-    .stButton > button {
-        border-radius: 12px !important; height: 55px !important;
-        font-weight: 900 !important; font-size: 18px !important;
-        transition: all 0.4s ease !important;
-        box-shadow: 0 4px 15px rgba(32, 160, 144, 0.2) !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-3px) !important;
-        box-shadow: 0 8px 25px rgba(32, 160, 144, 0.4) !important;
-    }
-
-    /* الوصل الرسمي */
-    .official-receipt {
-        background: #fff; border: 2px solid #000; padding: 40px;
-        border-radius: 5px; position: relative;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# ==========================================
-# 2. قاعدة البيانات وسجل العمليات
-# ==========================================
-def init_db():
-    conn = sqlite3.connect('ayn_iraq_v7.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS official_records 
-                 (id INTEGER PRIMARY KEY, b_id TEXT, details TEXT, status TEXT)''')
-    conn.commit()
-    return conn
-
-conn = init_db()
-
-# تهيئة الجلسة
-if 'step' not in st.session_state: st.session_state.step = 1
-if 'logs' not in st.session_state: st.session_state.logs = []
-
-# الحقول المطلوبة (للتأكد من عدم فقدان البيانات)
-fields = ['nat_id', 'res_id', 'res_issuer', 'res_date', 'f_name', 's_name', 't_name', 'surname', 
-          'm_f_name', 'm_s_name', 'm_t_name', 'phone', 'blood', 'gender', 'province', 'office', 'service', 'booking_date']
-for f in fields:
-    if f not in st.session_state: st.session_state[f] = ""
-
-# ==========================================
-# 3. شريط المهام الجانبي (المراقب الأمني)
-# ==========================================
-with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Coat_of_arms_of_Iraq.svg/1200px-Coat_of_arms_of_Iraq.svg.png", width=120)
-    st.title("بوابة الإدارة")
-    st.markdown("---")
-    st.subheader("🔴 حالة السيرفر الحكومي")
-    st.success("متصل (Online)")
+    user_input_code = st.text_input("أدخل الرمز المكون من 4 أرقام", max_chars=4)
     
-    st.subheader("📝 سجل النشاط")
-    for log in st.session_state.logs[-5:]:
-        st.caption(f"🕒 {log}")
+    if st.button("تحقق الآن ✅"):
+        if user_input_code == st.session_state.generated_otp:
+            st.session_state.auth_status = True
+            st.session_state.step = "location_selection"
+            st.success("تم التحقق بنجاح. جاري فتح استمارة الحجز...")
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error("الرمز غير صحيح، يرجى المحاولة مرة أخرى")
 
-# ==========================================
-# 4. محرك الخطوات (Step Engine)
-# ==========================================
-st.markdown(f"<h1 style='color:#20A090; text-align:center;'>🇮🇶 منظومة حجز البطاقة الوطنية - الخطوة {st.session_state.step}</h1>", unsafe_allow_html=True)
+# --- المرحلة الثالثة: اختيار الموقع والتاريخ (Server Sync) ---
+elif st.session_state.step == "location_selection":
+    st.title("تحديد مركز المراجعة والموعد المتاح")
+    
+    prov = st.selectbox("المحافظة", list(SERVER_DATES.keys()))
+    city = st.selectbox("الدائرة / المركز", list(SERVER_DATES[prov].keys()))
+    
+    # سحب التواريخ المتاحة لهذا المركز حصراً من السيرفر
+    available_days = SERVER_DATES[prov][city]
+    
+    st.write("🗓️ المواعيد المتوفرة في هذا المركز:")
+    final_date = st.radio("اختر موعدك", available_days)
+    
+    if st.button("تأكيد الموعد والمتابعة ⬅️"):
+        st.session_state.selected_loc = f"{prov} - {city}"
+        st.session_state.selected_date = final_date
+        st.session_state.step = "personal_data"
+        st.rerun()
 
-# --- الخطوة 1: المستمسكات ---
-if st.session_state.step == 1:
-    with st.container():
-        st.markdown("<div class='step-card'><h3>📄 بيانات الوثائق الرسمية</h3>", unsafe_allow_html=True)
-        st.session_state.nat_id = st.text_input("رقم البطاقة الوطنية (12 رقم)", st.session_state.nat_id, max_chars=12)
-        st.session_state.res_id = st.text_input("رقم بطاقة السكن (9 أرقام)", st.session_state.res_id, max_chars=9)
+# --- المرحلة الرابعة: المعلومات الشخصية (Final Entry) ---
+elif st.session_state.step == "personal_data":
+    st.title("إكمال بيانات الاستمارة")
+    with st.form("final_form"):
         col1, col2 = st.columns(2)
-        with col1: st.session_state.res_issuer = st.text_input("جهة الإصدار (انظر خلف البطاقة)")
-        with col2: st.session_state.res_date = st.date_input("تاريخ إصدار بطاقة السكن")
+        name = col1.text_input("الاسم الرباعي واللقب")
+        nid = col2.text_input("رقم البطاقة الوطنية (12 رقم)", max_chars=12)
         
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("تأكيد الوثائق والانتقال للخطوة التالية ⬅️", use_container_width=True):
-            if len(st.session_state.nat_id) == 12 and len(st.session_state.res_id) == 9:
-                st.session_state.step = 2
+        mother = st.text_input("اسم الأم الثلاثي")
+        
+        st.markdown("---")
+        if st.form_submit_button("إصدار الوصل النهائي وتشفير البيانات"):
+            if name and len(nid) == 12:
+                st.session_state.final_info = {"name": name, "id": nid, "mother": mother}
+                st.session_state.step = "receipt"
                 st.rerun()
             else:
-                st.error("⚠️ خطأ في عدد الأرقام! يرجى التأكد من الرقم الوطني (12) وبطاقة السكن (9).")
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.error("يرجى التأكد من ملء كافة الحقول بشكل صحيح")
 
-# --- الخطوة 2: البيانات الشخصية (تصحيح الخطأ هنا) ---
-elif st.session_state.step == 2:
-    with st.container():
-        st.markdown("<div class='step-card'><h3>👤 البيانات الشخصية للمواطن</h3>", unsafe_allow_html=True)
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: st.session_state.f_name = st.text_input("الاسم الأول")
-        with c2: st.session_state.s_name = st.text_input("اسم الأب")
-        with c3: st.session_state.t_name = st.text_input("اسم الجد")
-        with c4: st.session_state.surname = st.text_input("اللقب")
-        
-        st.markdown("**بيانات الأم الثلاثي:**")
-        c5, c6, c7 = st.columns(3)
-        with c5: st.session_state.m_f_name = st.text_input("اسم الأم")
-        with c6: st.session_state.m_s_name = st.text_input("اسم أب الأم")
-        with c7: st.session_state.m_t_name = st.text_input("اسم جد الأم")
-        
-        st.session_state.phone = st.text_input("رقم الهاتف الفعال")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        # تصحيح تسمية الأعمدة لمنع الخطأ
-        col_nav_1, col_nav_2 = st.columns(2)
-        with col_nav_1:
-            if st.button("➡️ العودة للوثائق", use_container_width=True):
-                st.session_state.step = 1
-                st.rerun()
-        with col_nav_2:
-            if st.button("تأكيد البيانات والمتابعة ⬅️", use_container_width=True):
-                if st.session_state.f_name and st.session_state.phone:
-                    st.session_state.step = 3
-                    st.rerun()
-                else:
-                    st.error("⚠️ يرجى إكمال الحقول الأساسية.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# --- الخطوة 3: الحجز النهائي ---
-elif st.session_state.step == 3:
-    with st.container():
-        st.markdown("<div class='step-card'><h3>🏢 اختيار مركز الحجز والموعد</h3>", unsafe_allow_html=True)
-        col_x, col_y = st.columns(2)
-        with col_x:
-            st.session_state.office = st.selectbox("دائرة الأحوال المختصة", ["قسم معلومات حديثة", "الرمادي", "الكرخ", "الرصافة"])
-            st.session_state.service = st.selectbox("نوع الخدمة", ["إصدار لأول مرة", "تجديد سنوي", "بدل ضائع"])
-        with col_y:
-            st.session_state.booking_date = st.date_input("موعد المراجعة")
-        
-        st.warning("🔒 بالضغط على التأكيد، سيتم تشفير البيانات وإرسالها مباشرة لسيرفرات عين العراق.")
-        
-        col_fin_1, col_fin_2 = st.columns(2)
-        with col_fin_1:
-            if st.button("➡️ تعديل البيانات الشخصية"): st.session_state.step = 2; st.rerun()
-        with col_fin_2:
-            if st.button("🔥 تأكيد الحجز وإرسال للسيرفر الحكومي", use_container_width=True):
-                with st.spinner('📡 جاري الربط وتأكيد الحجز...'):
-                    time.sleep(2)
-                    b_id = f"AYN-{int(time.time())}"
-                    st.session_state.final_b_id = b_id
-                    st.session_state.logs.append(f"تم حجز بنجاح للمواطن: {st.session_state.f_name} - الكود: 200 OK")
-                    st.session_state.step = 4
-                    st.rerun()
-
-# --- الخطوة 4: الوصل الرسمي (Header) ---
-elif st.session_state.step == 4:
-    st.balloons()
-    full_name_all = f"{st.session_state.f_name} {st.session_state.s_name} {st.session_state.t_name} {st.session_state.surname}"
+# --- المرحلة الخامسة: الوصل والباركود ---
+elif st.session_state.step == "receipt":
+    st.success("تم الحجز بنجاح! يرجى تصوير الشاشة أو طباعة الوصل")
+    
+    # توليد باركود حقيقي يحتوي على بيانات المستخدم التي أدخلها
+    qr_content = f"BOOKING_ID:{int(time.time())}\nNID:{st.session_state.final_info['id']}\nDATE:{st.session_state.selected_date}"
+    qr = qrcode.make(qr_content)
+    buf = BytesIO(); qr.save(buf, format="PNG"); qr_img = buf.getvalue()
     
     st.markdown(f"""
-    <div class="official-receipt">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #000; padding-bottom: 10px;">
-            <div style="text-align: center;">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Coat_of_arms_of_Iraq.svg/1200px-Coat_of_arms_of_Iraq.svg.png" width="80">
-                <p style="margin:0; font-weight:bold;">جمهورية العراق</p>
-                <p style="margin:0; font-size:12px;">وزارة الداخلية</p>
-            </div>
-            <div style="text-align: center;">
-                <h2 style="margin:0; color: #1a1a1a;">وصل حجز إلكتروني</h2>
-                <h3 style="color: red; margin:5px;">{st.session_state.final_b_id}</h3>
-            </div>
-            <div style="text-align: center;">
-                <p style="font-size:12px;">بوابة عين العراق</p>
-                <p style="font-weight:bold;">{datetime.now().strftime('%Y-%m-%d')}</p>
-            </div>
-        </div>
-        
-        <table style="width:100%; margin-top:20px; border-collapse: collapse; font-size: 18px;">
-            <tr>
-                <td style="padding:10px; border: 1px solid #eee;"><b>الاسم الكامل:</b> {full_name_all}</td>
-                <td style="padding:10px; border: 1px solid #eee;"><b>رقم الهاتف:</b> {st.session_state.phone}</td>
-            </tr>
-            <tr>
-                <td style="padding:10px; border: 1px solid #eee;"><b>الرقم الوطني:</b> {st.session_state.nat_id}</td>
-                <td style="padding:10px; border: 1px solid #eee;"><b>رقم بطاقة السكن:</b> {st.session_state.res_id}</td>
-            </tr>
-            <tr>
-                <td style="padding:10px; border: 1px solid #eee;"><b>مركز الإصدار:</b> {st.session_state.office}</td>
-                <td style="padding:10px; border: 1px solid #eee;"><b>تاريخ المراجعة:</b> {st.session_state.booking_date}</td>
-            </tr>
-        </table>
-        
-        <p style="text-align:center; margin-top:20px; font-weight:bold; color:red;">* يرجى إحضار المستمسكات الأصلية عند المراجعة.</p>
+    <div style="border:5px solid #20A090; padding:20px; border-radius:15px; background:white; color:black;">
+        <h2 style="text-align:center;">وصل حجز عين العراق</h2>
+        <p><b>الاسم:</b> {st.session_state.final_info['name']}</p>
+        <p><b>رقم الهوية:</b> {st.session_state.final_info['id']}</p>
+        <p><b>المركز:</b> {st.session_state.selected_loc}</p>
+        <h3 style="color:red; text-align:center;">الموعد: {st.session_state.selected_date}</h3>
     </div>
     """, unsafe_allow_html=True)
     
-    # باركود
-    qr = qrcode.make(f"Verified:{st.session_state.final_b_id}")
-    buf = BytesIO(); qr.save(buf, format="PNG"); byte_im = buf.getvalue()
-    st.image(byte_im, width=150, caption="باركود التحقق الرسمي")
-    
-    if st.button("إصدار استمارة جديدة"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
+    st.image(qr_img, width=200)
+    if st.button("حجز جديد"):
+        st.session_state.clear()
         st.rerun()
