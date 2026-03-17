@@ -3,6 +3,13 @@
     "name": "Ayn-Iraq Virtual Bridge",
     "slug": "ain-iraq-virtual-bridge",
     "version": "1.0.0",
+    "owner": "ahmed92921s-organization",
+    "updates": {
+      "url": "https://u.expo.dev/02c9e483-c89f-4509-ab30-265580c8bff7"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "02c9e483-c89f-4509-ab30-265580c8bff7"
