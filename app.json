@@ -3,29 +3,13 @@
     "name": "Ayn-Iraq Virtual Bridge",
     "slug": "ain-iraq-virtual-bridge",
     "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#050505"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true
+    "extra": {
+      "eas": {
+        "projectId": "02c9e483-c89f-4509-ab30-265580c8bff7"
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#050505"
-      },
       "package": "com.moi.ayniq"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
     }
   }
 }
