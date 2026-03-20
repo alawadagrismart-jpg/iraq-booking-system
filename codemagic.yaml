@@ -9,13 +9,17 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
-      - name: Expo Prebuild (Critical Step)
+      - name: Force Clean & Prebuild (Critical Fix)
         script: |
-          # هذا الأمر يقرأ app.json ويصنع مجلد android اللازم للبناء
+          # مسح أي بقايا قديمة لمجلد الأندرويد لضمان بناء نظيف 100%
+          rm -rf android
+          # توليد مجلد أندرويد جديد بناءً على الإعدادات المحدثة في app.json
           npx expo prebuild --platform android --no-install
       - name: Build Android APK
         script: |
-          # الدخول للمجلد وبناء النسخة النهائية
-          cd android && ./gradlew assembleRelease
+          # الدخول للمجلد وعمل تنظيف لـ Gradle قبل تجميع الـ APK
+          cd android
+          ./gradlew clean
+          ./gradlew assembleRelease
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
