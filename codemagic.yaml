@@ -9,17 +9,20 @@ workflows:
       - name: Install dependencies
         script: |
           npm install
-      - name: Force Clean & Prebuild (Critical Fix)
+          # تثبيت نسخة محددة جداً من SVG متوافقة مع React Native 0.73
+          npm install react-native-svg@15.1.0 
+      - name: Extreme Clean & Prebuild
         script: |
-          # مسح أي بقايا قديمة لمجلد الأندرويد لضمان بناء نظيف 100%
+          # مسح مجلد أندرويد بالكامل إذا كان موجوداً
           rm -rf android
-          # توليد مجلد أندرويد جديد بناءً على الإعدادات المحدثة في app.json
+          # بناء المجلد من الصفر تماماً
           npx expo prebuild --platform android --no-install
       - name: Build Android APK
         script: |
-          # الدخول للمجلد وعمل تنظيف لـ Gradle قبل تجميع الـ APK
           cd android
+          # تنظيف نظام Gradle من أي ملفات مؤقتة
           ./gradlew clean
+          # بدء البناء النهائي
           ./gradlew assembleRelease
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
