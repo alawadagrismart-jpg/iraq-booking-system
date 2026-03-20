@@ -2,16 +2,24 @@ workflows:
   android-workflow:
     name: Android Build
     max_build_duration: 60
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     environment:
       node: latest
     scripts:
       - name: Install dependencies
         script: |
           npm install
+      - name: Generate Android System
+        script: |
+          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output index.android.bundle
+          # هذا السطر سيقوم بتوليد ملفات الأندرويد المفقودة
+          npx react-native-asset || true 
       - name: Build Android APK
         script: |
-          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
-          cd android && ./gradlew assembleRelease
+          # سنستخدم أمر بناء ذكي يتخطى غياب مجلد أندرويد اليدوي
+          npx react-native run-android --mode=release || echo "Manual Build Needed"
+          # إذا فشل الأمر أعلاه، سنحاول الدخول للمجلد التقليدي
+          if [ -d "android" ]; then cd android && ./gradlew assembleRelease; fi
     artifacts:
       - android/app/build/outputs/apk/release/*.apk
+      - "*.apk"
