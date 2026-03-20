@@ -17,10 +17,6 @@
     },
     "android": {
       "package": "com.moi.ayniq",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
       "permissions": [
         "INTERNET"
       ]
